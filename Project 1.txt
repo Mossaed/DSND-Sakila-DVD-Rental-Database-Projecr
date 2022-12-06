@@ -1,0 +1,113 @@
+-- First Question --
+
+
+select t1.film_title,t2.category_name,t1.rental_count
+
+from
+	(select f.title as film_title,ca.name as category_name,count(r.inventory_id) as rental_count
+		from rental as r
+		join inventory as i on r.inventory_id = i.inventory_id
+		join film as f on i.film_id = f.film_id
+		join film_category as fc on f.film_id = fc.film_id
+		join category as ca on fc.category_id = ca.category_id
+		group by 1, 2
+		order by 2) as t1
+join
+	(select ca.name as category_name from category as ca
+		where ca.name = 'children'
+			or ca.name = 'animation'
+			or ca.name = 'classics'
+			or ca.name = 'comedy'
+			or ca.name = 'family'
+			or ca.name = 'music') as t2 on t1.category_name = t2.category_name;
+
+
+
+-- Second Question --
+
+
+with top_ten as (select c.customer_id,concat(c.first_name, ' ', c.last_name) as full_name, sum(p.amount)
+                from customer as c
+                join payment as p
+                on c.customer_id = p.customer_id
+                group by 1, 2
+                order by 3 desc,
+ 		    2 limit 10),
+details as (select  c.customer_id,
+                        date_trunc('month', p.payment_date) as pay_month,
+                        count(p.payment_id) as pay_count,
+                        sum(p.amount) as total_amount
+                from customer c
+                inner join payment p
+                on c.customer_id = p.customer_id
+                where date_part('year', p.payment_date) = 2007
+                group by 1, 2
+                order by 4 desc)
+
+select  full_name, max(pay_difference) as max_pay_difference
+from(select d.pay_month,tt.full_name,d.pay_count,d.total_amount,
+        lead(d.total_amount) over(partition by tt.full_name order by d.total_amount) - d.total_amount pay_difference
+from top_ten as tt
+	join details as d
+	on tt.customer_id = d.customer_id
+	order by 2, 1) sub
+	group by 1
+	order by 2 desc;
+
+
+
+-- Third Question -- 
+
+
+with t1 as (
+  select f.title as film_name,c.name as category,count(rental_id) as rental_count
+  from
+    category as c
+    join film_category as fc on c.category_id = fc.category_id
+    join film as f on f.film_id = fc.film_id
+    join inventory as i on i.film_id = f.film_id
+    join rental as r on i.inventory_id = r.inventory_id
+    join film_actor as fa on f.film_id = fa.film_id
+    join actor as a on a.actor_id = fa.actor_id
+  group by 1,2),
+t2 as (
+  select
+    category,
+    max(rental_count) as max_rental_count
+  from
+    (
+      select
+        f.title as film_title,c.name as category,count(r.rental_id) as rental_count
+      from
+        category as c
+        join film_category as fc on c.category_id = fc.category_id
+        join film as f on f.film_id = fc.film_id
+        join inventory as i on i.film_id = f.film_id
+        join rental as r on i.inventory_id = r.inventory_id
+        join film_actor as fa on f.film_id = fa.film_id
+        join actor as a on a.actor_id = fa.actor_id
+      group by 1,2
+      order by 3 desc
+    ) t1
+  group by 1
+)
+select film_name,t1.category,max_rental_count
+from t1
+  join t2 on t1.category = t2.category
+  and t1.rental_count = t2.max_rental_count
+order by 3 desc;
+
+
+-- Fourth Question -- 
+
+
+select sub_q.name,sub_q.standard_quartile,count(name)
+from
+	(select ca.name as name,
+			ntile(4) over (order by f.rental_duration) as standard_quartile
+		from film as f
+		join film_category as fc on f.film_id = fc.film_id
+		join category as ca on fc.category_id = ca.category_id
+		where name in ('animation', 'children', 'classics', 'comedy', 'family', 'music')) as sub_q
+group by 1, 2
+order by 1, 2 asc;
